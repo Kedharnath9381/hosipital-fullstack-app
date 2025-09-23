@@ -1,21 +1,15 @@
-# Use a base image that has both Maven and JDK pre-configured
-FROM maven:3.8.5-openjdk-11 AS builder
-
+# Simple one-stage build
+FROM maven:3.8.5-openjdk-17 AS builder
 WORKDIR /workspace/app
 
-# Copy only the POM first to cache dependencies
-COPY Backend-CICD/pom.xml .
-# Download dependencies
-RUN mvn dependency:go-offline -B
-
-# Copy source code
-COPY Backend-CICD/src ./src
+# Copy entire backend project
+COPY ../Backend-CICD/ .
 
 # Build the application
 RUN mvn clean package -DskipTests
 
 # Runtime image
-FROM openjdk:11-jre-slim
+FROM openjdk:17
 WORKDIR /app
 COPY --from=builder /workspace/app/target/*.jar app.jar
 

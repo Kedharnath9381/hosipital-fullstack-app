@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   db:
     image: mysql:8.0
-    container_name: cicd-mysql
+    container_name: hospital-db
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: cicdproject
@@ -11,15 +9,15 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - db_data:/var/lib/mysql
     networks:
-      - app-network
+      - hospital-net
 
   backend:
     build:
-      context: ..  # Go up to CICD-PROJECT root
+      context: ..
       dockerfile: docker-git-fullstackapp/Dockerfile.backend
-    container_name: cicd-backend
+    container_name: hospital-backend
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/cicdproject?useSSL=false
@@ -32,24 +30,24 @@ services:
     ports:
       - "5050:5050"
     networks:
-      - app-network
+      - hospital-net
 
   frontend:
     build:
-      context: ..  # Go up to CICD-PROJECT root
+      context: ..
       dockerfile: docker-git-fullstackapp/Dockerfile.frontend
-    container_name: cicd-frontend
+    container_name: hospital-frontend
     restart: unless-stopped
-    depends_on:
-      - backend
     ports:
       - "80:80"
+    depends_on:
+      - backend
     networks:
-      - app-network
+      - hospital-net
 
 volumes:
-  mysql_data:
+  db_data:
 
 networks:
-  app-network:
+  hospital-net:
     driver: bridge

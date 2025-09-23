@@ -2,21 +2,16 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 
-# Copy package files first for better caching
-COPY ../Frontend-CICD/package.json ../Frontend-CICD/package-lock.json ./
-RUN npm ci --only=production
-
-# Copy source code and build
+# Copy entire frontend project
 COPY ../Frontend-CICD/ ./
+
+# Install and build
+RUN npm install
 RUN npm run build
 
-# Production stage
+# Run stage
 FROM nginx:alpine
-
-# Copy built files from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
 EXPOSE 80

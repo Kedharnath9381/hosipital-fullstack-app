@@ -1,58 +1,116 @@
-name: Deploy to AWS
+name: Deploy Hospital Fullstack App on EC2
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:  # Manual trigger
-
-env:
-  PROJECT_DIR: /home/ec2-user/cicd-app
+    branches:
+      - main
+  workflow_dispatch:   # allow manual run from GitHub UI
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    timeout-minutes: 20
 
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@v0.1.3
-      with:
-        host: ${{ secrets.AWS_HOST }}
-        username: ${{ secrets.AWS_USERNAME }}
-        key: ${{ secrets.AWS_SSH_KEY }}
-        script: |
-          echo "🚀 Starting deployment..."
-          
-          # Create project directory
-          sudo mkdir -p $PROJECT_DIR
-          sudo chown ec2-user:ec2-user $PROJECT_DIR
-          
-          # Navigate to project directory
-          cd $PROJECT_DIR
-          
-          # Clean previous deployment
-          rm -rf *
-          
-          # Clone the repository
-          git clone https://github.com/${{ github.repository }}.git .
-          
-          echo "📦 Building and starting containers..."
-          
-          # Build and start containers from docker-git-fullstackapp directory
-          cd docker-git-fullstackapp
-          sudo docker-compose down || true
-          sudo docker-compose up -d --build
-          
-          echo "⏳ Waiting for services to start..."
-          sleep 30
-          
-          echo "✅ Deployment completed!"
-          echo "📊 Running containers:"
-          sudo docker ps
-          
-          echo "❤️ Health checks:"
-          curl -f http://localhost:80/ || echo "Frontend is running"
-          curl -f http://localhost:5050/actuator/health || echo "Backend is healthy"
+    steps:
+      # Step 1: Checkout repo
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      # Step 2: Debug - list files in repo
+      - name: List repo files
+        run: |
+          echo "=== Project Structure ==="
+          ls -la
+          echo "=== Backend Contents ==="
+          ls -la Backend-CICD/
+          echo "=== Frontend Contents ==="
+          ls -la Frontend-CICD/
+          echo "=== Docker Files ==="
+          ls -la docker-git-fullstackapp/
+
+      # Step 3: Copy files to EC2
+      - name: Copy repo to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ec2-user   # ✅ Amazon Linux user
+          key: ${{ secrets.AWS_SSH_KEY }}
+          source: "./*"
+          target: /home/ec2-user/cicd-app
+          overwrite: true
+
+      # Step 4: SSH into EC2 and deploy with Docker Compose
+      - name: Deploy on EC2 with Docker Compose
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ec2-user    # ✅ Amazon Linux user
+          key: ${{ secrets.AWS_SSH_KEY }}
+          script_stop: true
+          debug: true
+          script: |
+            set -e  # Exit on error
+            
+            echo "🚀 Starting deployment..."
+            cd /home/ec2-user/cicd-app
+
+            # Install Docker if missing (Amazon Linux 2023)
+            if ! command -v docker &> /dev/null; then
+              echo "Installing Docker..."
+              sudo yum update -y
+              sudo yum install docker -y
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -a -G docker ec2-user
+            fi
+
+            # Install Docker Compose if missing
+            if ! command -v docker-compose &> /dev/null; then
+              echo "Installing Docker Compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
+
+            # Install Git if missing
+            if ! command -v git &> /dev/null; then
+              echo "Installing Git..."
+              sudo yum install git -y
+            fi
+
+            echo "✅ Dependencies installed successfully!"
+
+            # Navigate to docker directory
+            cd docker-git-fullstackapp
+
+            # Stop old containers, rebuild, and restart
+            echo "🐳 Stopping old containers..."
+            sudo docker-compose down || true
+
+            echo "🏗️ Building new containers..."
+            sudo docker-compose build --no-cache
+
+            echo "🚀 Starting services..."
+            sudo docker-compose up -d
+
+            echo "⏳ Waiting for services to start..."
+            sleep 30
+
+            # Health checks
+            echo "❤️ Running health checks..."
+            sudo docker ps
+
+            # Test frontend
+            if curl -s -f http://localhost:80/ >/dev/null; then
+              echo "✅ Frontend is running on port 80"
+            else
+              echo "⚠️ Frontend health check failed"
+            fi
+
+            # Test backend
+            if curl -s -f http://localhost:5050/actuator/health >/dev/null; then
+              echo "✅ Backend is healthy on port 5050"
+            else
+              echo "⚠️ Backend health check failed"
+            fi
+
+            echo "🎉 Deployment completed successfully!"
