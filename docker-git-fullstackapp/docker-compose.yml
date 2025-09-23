@@ -15,8 +15,8 @@ services:
 
   backend:
     build:
-      context: ..
-      dockerfile: docker-git-fullstackapp/Dockerfile.backend
+      context: ./Backend-CICD  # Build from backend directory
+      dockerfile: ../docker-git-fullstackapp/Dockerfile.backend
     container_name: hospital-backend
     restart: unless-stopped
     environment:
@@ -34,8 +34,8 @@ services:
 
   frontend:
     build:
-      context: ..
-      dockerfile: docker-git-fullstackapp/Dockerfile.frontend
+      context: ./Frontend-CICD  # Build from frontend directory
+      dockerfile: ../docker-git-fullstackapp/Dockerfile.frontend
     container_name: hospital-frontend
     restart: unless-stopped
     ports:
