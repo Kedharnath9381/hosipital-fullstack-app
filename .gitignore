@@ -1,43 +1,22 @@
-# Docker
-docker-compose.override.yml
-.dockerignore
-
 # Backend
 Backend-CICD/target/
 Backend-CICD/.settings/
 Backend-CICD/.project
 Backend-CICD/.classpath
-Backend-CICD/.mvn/wrapper/maven-wrapper.jar
-Backend-CICD/mvnw.cmd
-Backend-CICD/mvnw
-Backend-CICD/*.log
 
 # Frontend
 Frontend-CICD/node_modules/
 Frontend-CICD/dist/
 Frontend-CICD/build/
-Frontend-CICD/.env
-Frontend-CICD/.env.local
-Frontend-CICD/.env.production
-Frontend-CICD/npm-debug.log*
-Frontend-CICD/yarn-debug.log*
-Frontend-CICD/yarn-error.log*
+
+# Docker
+.dockerignore
 
 # IDE
 .vscode/
 .idea/
 *.iml
-*.swp
-*.swo
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Temp files
-*.tmp
-*.temp

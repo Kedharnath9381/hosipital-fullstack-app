@@ -7,26 +7,24 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: cicdproject
-      MYSQL_ROOT_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      MYSQL_ROOT_PASSWORD: Kedharnath@9381
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./mysql/conf.d:/etc/mysql/conf.d:ro
-    command: --default-authentication-plugin=mysql_native_password
     networks:
-      - cicd-network
+      - app-network
 
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile.backend
+      context: ..  # Go up to CICD-PROJECT root
+      dockerfile: docker-git-fullstackapp/Dockerfile.backend
     container_name: cicd-backend
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/cicdproject?useSSL=false
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      SPRING_DATASOURCE_PASSWORD: Kedharnath@9381
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SERVER_PORT: 5050
     depends_on:
@@ -34,24 +32,24 @@ services:
     ports:
       - "5050:5050"
     networks:
-      - cicd-network
+      - app-network
 
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ..  # Go up to CICD-PROJECT root
+      dockerfile: docker-git-fullstackapp/Dockerfile.frontend
     container_name: cicd-frontend
     restart: unless-stopped
-    ports:
-      - "80:80"
     depends_on:
       - backend
+    ports:
+      - "80:80"
     networks:
-      - cicd-network
+      - app-network
 
 volumes:
   mysql_data:
 
 networks:
-  cicd-network:
+  app-network:
     driver: bridge
