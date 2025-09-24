@@ -14,7 +14,7 @@ services:
 
   backend:
     build:
-      context: ../Backend-CICD
+      context: .
       dockerfile: ../docker-git-fullstackapp/Dockerfile.backend
     ports:
       - "5050:5050"
@@ -29,7 +29,7 @@ services:
 
   frontend:
     build:
-      context: ../Frontend-CICD
+      context: .
       dockerfile: ../docker-git-fullstackapp/Dockerfile.frontend
     ports:
       - "80:80"
