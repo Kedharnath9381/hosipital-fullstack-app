@@ -1,53 +1,46 @@
+version: '3.8'
 services:
-  db:
+  mysql:
     image: mysql:8.0
-    container_name: hospital-db
-    restart: unless-stopped
     environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: cicdproject
-      MYSQL_ROOT_PASSWORD: Kedharnath@9381
     ports:
       - "3306:3306"
     volumes:
-      - db_data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
     networks:
-      - hospital-net
+      - app-network
 
   backend:
     build:
-      context: ./Backend-CICD  # Build from backend directory
+      context: ../Backend-CICD
       dockerfile: ../docker-git-fullstackapp/Dockerfile.backend
-    container_name: hospital-backend
-    restart: unless-stopped
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/cicdproject?useSSL=false
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: Kedharnath@9381
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SERVER_PORT: 5050
-    depends_on:
-      - db
     ports:
       - "5050:5050"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cicdproject
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      - mysql
     networks:
-      - hospital-net
+      - app-network
 
   frontend:
     build:
-      context: ./Frontend-CICD  # Build from frontend directory
+      context: ../Frontend-CICD
       dockerfile: ../docker-git-fullstackapp/Dockerfile.frontend
-    container_name: hospital-frontend
-    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
       - backend
     networks:
-      - hospital-net
+      - app-network
 
 volumes:
-  db_data:
+  mysql_data:
 
 networks:
-  hospital-net:
+  app-network:
     driver: bridge
