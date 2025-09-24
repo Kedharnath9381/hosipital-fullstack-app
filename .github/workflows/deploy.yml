@@ -1,79 +1,110 @@
-name: Deploy Hospital Fullstack App on EC2
+name: Deploy to AWS EC2
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
-  deploy:
+  build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+    
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Java
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - name: Build Backend
+      run: |
+        cd Backend-CICD
+        chmod +x mvnw
+        ./mvnw clean package -DskipTests
+        
+    - name: Build Frontend
+      run: |
+        cd Frontend-CICD
+        npm install
+        npm run build
+        
+    - name: Build Docker Images
+      run: |
+      
+        cp docker-git-fullstackapp/nginx.conf Frontend-CICD/
+        
+        cd docker-git-fullstackapp
+        DB_PASSWORD=${{ secrets.DB_PASSWORD }} docker-compose build
+        
+    - name: Save Docker Images
+      run: |
+        cd docker-git-fullstackapp
+        docker save $(docker-compose config | awk '{if ($1 == "image:") print $2}') -o images.tar
+        
+    - name: Upload Docker Images
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-images
+        path: docker-git-fullstackapp/images.tar
 
-      - name: Deploy on EC2
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ec2-user
-          key: ${{ secrets.AWS_SSH_KEY }}
-          script: |
-            set -e
-            echo "🚀 Starting deployment..."
-            
-            # Navigate to correct directory
-            cd /home/ec2-user/cicd-app/docker-git-fullstackapp
-            
-            echo "📁 Current directory: $(pwd)"
-            echo "📁 Contents:"
-            ls -la
-            
-            # Install Docker if missing (Amazon Linux)
-            if ! command -v docker &> /dev/null; then
-              echo "Installing Docker..."
-              sudo yum update -y
-              sudo yum install docker -y
-              sudo systemctl start docker
-              sudo systemctl enable docker
-              sudo usermod -a -G docker ec2-user
-            fi
-
-            # Install Docker Compose if missing
-            if ! command -v docker-compose &> /dev/null; then
-              echo "Installing Docker Compose..."
-              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-              sudo chmod +x /usr/local/bin/docker-compose
-            fi
-
-            echo "✅ Dependencies installed"
-            
-            # Build and deploy
-            echo "🐳 Building and starting containers..."
-            sudo docker-compose down || true
-            sudo docker-compose build --no-cache
-            sudo docker-compose up -d
-            
-            echo "⏳ Waiting for services to start..."
-            sleep 30
-            
-            # Health checks
-            echo "❤️ Health checks:"
-            sudo docker ps
-            
-            if curl -s -f http://localhost:80/ >/dev/null; then
-              echo "✅ Frontend is running"
-            else
-              echo "⚠️ Frontend health check failed"
-            fi
-            
-            if curl -s -f http://localhost:5050/actuator/health >/dev/null; then
-              echo "✅ Backend is healthy"
-            else
-              echo "⚠️ Backend health check failed"
-            fi
-            
-            echo "🎉 Deployment completed successfully!"
+  deploy-to-aws:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download Docker Images
+      uses: actions/download-artifact@v3
+      with:
+        name: docker-images
+        
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: Deploy to EC2
+      run: |
+        # Copy docker-compose file to EC2
+        scp -i ~/.ssh/id_rsa docker-git-fullstackapp/docker-compose.yml ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:/home/ec2-user/app/docker-compose.yml
+        
+        # Copy images to EC2
+        scp -i ~/.ssh/id_rsa images.tar ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:/home/ec2-user/app/images.tar
+        
+        # Execute deployment on EC2
+        ssh -i ~/.ssh/id_rsa ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'EOF'
+          cd /home/ec2-user/app
+          
+          # Stop existing containers
+          docker-compose down || true
+          
+          # Clean up
+          docker system prune -f
+          
+          # Load new images
+          docker load -i images.tar
+          rm -f images.tar
+          
+          # Start containers with environment variable
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }} docker-compose up -d
+          
+          # Wait for services to start
+          echo "Waiting for services to start..."
+          sleep 30
+          
+          # Check deployment status
+          echo "=== Deployment Status ==="
+          docker ps
+          echo "=== Checking Services ==="
+          curl -f http://localhost:80 >/dev/null 2>&1 && echo "Frontend: OK" || echo "Frontend: Not Ready"
+          curl -f http://localhost:5050 >/dev/null 2>&1 && echo "Backend: OK" || echo "Backend: Not Ready"
+          echo "Deployment completed!"
+        EOF
